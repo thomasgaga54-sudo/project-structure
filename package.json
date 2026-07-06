@@ -1,34 +1,33 @@
 {
   "name": "project-structure",
   "version": "1.0.0",
-  "description": "",
+  "description": "Zunny Mini Mart POS System",
   "main": "zunny-pos-backend/server.js",
   "scripts": {
-    "start": "cd zunny-pos-backend && node server.js",
-    "dev": "cd zunny-pos-backend && nodemon server.js"
+    "start": "node zunny-pos-backend/server.js",
+    "dev": "nodemon zunny-pos-backend/server.js",
+    "build": "npm install --prefix zunny-pos-backend"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gaga477/Project-Structure.git"
+    "url": "git+https://github.com/thomasgaga54-sudo/project-structure.git"
   },
   "keywords": [],
   "author": "Ogaga",
   "license": "ISC",
   "type": "commonjs",
-    "engines": { "node": "20.x" },
-  "bugs": {
-    "url": "https://github.com/gaga477/Project-Structure/issues"
-  },
-  "homepage": "https://github.com/gaga477/Project-Structure#readme",
+  "engines": { "node": "20.x" },
   "dependencies": {
-    "bcryptjs": "^3.0.3",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.7.0"
+    "mongoose": "^7.6.3",
+    "multer": "^2.1.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.0.1"
   }
 }
