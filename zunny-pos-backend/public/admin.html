@@ -256,7 +256,7 @@
     let allProducts = [];
     let filteredProducts = [];
 
-    function getToken() { return localStorage.getItem("token"); }
+    function getToken() { return localStorage.getItem("adminToken"); }
 
     function authHeaders() {
         return { "Content-Type": "application/json", "Authorization": "Bearer " + getToken() };
@@ -282,7 +282,7 @@
             const data = await res.json();
 
             if (res.ok && data.token) {
-                localStorage.setItem("token", data.token);
+                localStorage.setItem("adminToken", data.token);
                 document.getElementById("loginSection").style.display = "none";
                 document.getElementById("appSection").style.display = "block";
                 loadDashboard();
@@ -295,7 +295,7 @@
     }
 
     function logout() {
-        localStorage.removeItem("token");
+        localStorage.removeItem("adminToken");
         document.getElementById("appSection").style.display = "none";
         document.getElementById("loginSection").style.display = "block";
         document.getElementById("loginUsername").value = "";
@@ -338,50 +338,33 @@
 
     async function loadDashboard() {
         try {
-            const [productsRes, performanceRes] = await Promise.all([
-                fetch("/api/products"),
-                fetch("/api/sales/today-performance", {
-                    headers: authHeaders()
-                })
-            ]);
-
+            const productsRes = await fetch("/api/products");
             const productsData = await productsRes.json();
-            if (!productsRes.ok) {
-                throw new Error(productsData.message || `Unable to load products (${productsRes.status})`);
+            if (productsRes.ok) {
+                const totalValue = productsData.reduce((s, p) => s + ((p.price || 0) * (p.stock || 0)), 0);
+                const lowStock = productsData.filter(p => (p.stock || 0) < 10).length;
+                const cats = new Set(productsData.map(p => p.category).filter(Boolean)).size;
+                document.getElementById("totalProducts").textContent = productsData.length;
+                document.getElementById("totalValue").textContent = formatCurrency(totalValue);
+                document.getElementById("lowStock").textContent = lowStock;
+                document.getElementById("totalCategories").textContent = cats;
             }
+        } catch(e) { console.error("Products error:", e); }
 
-            const totalValue = productsData.reduce((s, p) => s + ((p.price || 0) * (p.stock || 0)), 0);
-            const lowStock = productsData.filter(p => (p.stock || 0) < 10).length;
-            const cats = new Set(productsData.map(p => p.category).filter(Boolean)).size;
-            document.getElementById("totalProducts").textContent = productsData.length;
-            document.getElementById("totalValue").textContent = formatCurrency(totalValue);
-            document.getElementById("lowStock").textContent = lowStock;
-            document.getElementById("totalCategories").textContent = cats;
-
-            // Load today's performance metrics
-            if (performanceRes.ok) {
-                const performance = await performanceRes.json();
-                document.getElementById('todayRevenue').textContent = formatCurrency(performance.revenueToday || 0);
-                document.getElementById('todayProfit').textContent = formatCurrency(performance.profitToday || 0);
-                document.getElementById('todayMargin').textContent = (parseFloat(performance.profitMargin) || 0) + '%';
-            } else {
-                throw new Error("Unable to load today's performance");
+        try {
+            const perfRes = await fetch("/api/sales/today-performance", { headers: authHeaders() });
+            if (perfRes.ok) {
+                const perf = await perfRes.json();
+                document.getElementById("todayRevenue").textContent = formatCurrency(perf.revenueToday || 0);
+                document.getElementById("todayProfit").textContent = formatCurrency(perf.profitToday || 0);
+                document.getElementById("todayMargin").textContent = (parseFloat(perf.profitMargin) || 0) + "%";
             }
+        } catch(e) { console.error("Performance error:", e); }
 
-            await loadReport();
-            await loadRawSales();
-        } catch (error) {
-            console.error("Dashboard error:", error);
-            showMessage("Error loading dashboard", "error");
-        }
+        try { await loadReport(); } catch(e) { console.error("Report error:", e); }
+        try { await loadRawSales(); } catch(e) { console.error("Sales error:", e); }
     }
 
-    async function loadReport() {
-        try {
-            const startDate = document.getElementById("reportStart").value;
-            const endDate = document.getElementById("reportEnd").value;
-            let url = "/api/sales/report";
-            if (startDate && endDate) {
                 url += `?start=${encodeURIComponent(startDate)}&end=${encodeURIComponent(endDate)}`;
             }
 
