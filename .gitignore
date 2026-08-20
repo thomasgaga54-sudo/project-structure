@@ -1,5 +1,7 @@
 node_modules/
 zunny-pos-backend/node_modules/
-zunny-pos-backend/config/.env
 .env
+zunny-pos-backend/.env
+zunny-pos-backend/config/.env
 *.log
+.vscode/
