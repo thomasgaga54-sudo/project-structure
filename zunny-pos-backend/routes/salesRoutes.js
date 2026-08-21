@@ -223,4 +223,29 @@ router.get("/recent", auth, async (req, res) => {
   }
 });
 
+// 🗑️ Void a sale and restore stock — admin only
+router.delete("/:id", auth, async (req, res) => {
+  if (req.user.role !== "admin") return res.status(403).json({ message: "Admins only" });
+  try {
+    const sale = await Sale.findById(req.params.id);
+    if (!sale) return res.status(404).json({ message: "Sale not found" });
+
+    // Restore stock for each item
+    for (const item of sale.items) {
+      const product = await Product.findById(item._id);
+      if (!product) {
+        console.warn(`[Void] Product ${item._id} no longer exists — skipping stock restore`);
+        continue;
+      }
+      product.stock += item.qty;
+      await product.save();
+    }
+
+    await Sale.findByIdAndDelete(req.params.id);
+    res.json({ message: "Sale voided and stock restored" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

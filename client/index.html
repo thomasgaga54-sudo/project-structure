@@ -330,6 +330,9 @@
         <input type="text" id="search" placeholder="Search product..." oninput="renderProducts()">
       </div>
     </div>
+    <div id="lowStockBanner" style="display:none;background:#fee2e2;border-left:4px solid #dc2626;padding:10px 14px;margin:0 16px 8px;border-radius:6px;color:#dc2626;font-size:13px;font-weight:600">
+      ⚠️ Low Stock: <span id="lowStockItems"></span>
+    </div>
     <div class="product-grid" id="productGrid">
       <div class="loading-msg">⏳ Loading products...</div>
     </div>
@@ -375,11 +378,25 @@
     window.location.href = "login.html";
   }
 
+  function checkLowStockCashier() {
+    const threshold = parseInt(localStorage.getItem("lowStockThreshold")) || 10;
+    const low = products.filter(p => (p.stock || 0) < threshold);
+    const banner = document.getElementById("lowStockBanner");
+    const items = document.getElementById("lowStockItems");
+    if (low.length) {
+        items.textContent = low.map(p => p.name + " (" + p.stock + ")").join(", ");
+        banner.style.display = "block";
+    } else {
+        banner.style.display = "none";
+    }
+  }
+
   async function loadProducts() {
     const cached = localStorage.getItem("cachedProducts");
     if (cached) {
       products = JSON.parse(cached);
       renderProducts();
+      checkLowStockCashier();
     }
     try {
       const res = await fetch("/api/products", {
@@ -389,6 +406,7 @@
       products = await res.json();
       localStorage.setItem("cachedProducts", JSON.stringify(products));
       renderProducts();
+      checkLowStockCashier();
     } catch {
       if (!cached) {
         document.getElementById("productGrid").innerHTML =

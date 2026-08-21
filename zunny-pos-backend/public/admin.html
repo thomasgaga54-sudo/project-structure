@@ -120,6 +120,17 @@
         <!-- Dashboard -->
         <div id="dashboard" class="tab-content active">
             <h3 style="margin-bottom:16px;color:#555">Inventory</h3>
+            <!-- Low Stock Threshold input -->
+            <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px">
+              <label style="font-weight:600;color:#555">Low Stock Threshold:</label>
+              <input type="number" id="lowStockThresholdInput" min="1" value="10"
+                     style="width:80px;padding:6px 10px;border:2px solid #e9ecef;border-radius:8px;font-size:14px"
+                     onchange="saveLowStockThreshold()">
+            </div>
+            <!-- Low Stock Banner -->
+            <div id="lowStockBanner" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:14px;margin-bottom:16px;color:#dc2626;font-weight:600">
+              ⚠️ Low Stock Alert: <span id="lowStockItems"></span>
+            </div>
             <div class="stats">
                 <div class="stat-card"><div class="stat-number" id="totalProducts">0</div><div class="stat-label">Total Products</div></div>
                 <div class="stat-card"><div class="stat-number" id="totalValue">₦0</div><div class="stat-label">Inventory Value</div></div>
@@ -133,6 +144,7 @@
                 <div class="stat-card"><div class="stat-number" id="todayRevenue">&#8358;0</div><div class="stat-label" style="color:#667eea">Revenue Today</div></div>
                 <div class="stat-card"><div class="stat-number" id="todayProfit" style="color:#40c057">&#8358;0</div><div class="stat-label">Profit Today</div></div>
                 <div class="stat-card"><div class="stat-number" id="todayMargin" style="color:#f59e0b">0%</div><div class="stat-label">Profit Margin</div></div>
+                <div class="stat-card"><div class="stat-number" id="todayTransactions" style="color:#8b5cf6">...</div><div class="stat-label">Transactions Today</div></div>
             </div>
 
 <h3 style="margin:24px 0 16px;color:#555">Sales History</h3>
@@ -141,6 +153,7 @@
                 <input type="date" id="reportEnd" style="padding:8px 12px;border:2px solid #e9ecef;border-radius:8px;font-size:14px">
                 <button class="btn btn-sm" onclick="loadReport()">Filter</button>
                 <button class="btn btn-sm" style="background:#6c757d" onclick="clearReport()">Clear</button>
+                <button class="btn btn-sm" style="background:#22c55e" onclick="exportCSV()">📥 Export CSV</button>
             </div>
             <div id="historyStatus" style="margin-bottom:12px;color:#555">Loading sales history...</div>
             <div style="overflow-x:auto">
@@ -158,7 +171,14 @@
                 </table>
             </div>
             <div style="margin-top:16px;">
-                <button class="btn btn-sm" style="background:#22c55e" onclick="loadRawSales()">Load Recent Sales</button>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+                    <button class="btn btn-sm" style="background:#22c55e" onclick="loadRawSales()">Load Recent Sales</button>
+                    <label style="font-weight:600;color:#555">Filter by Cashier:</label>
+                    <select id="cashierFilter" onchange="applyCashierFilter()"
+                            style="padding:7px 12px;border:2px solid #e9ecef;border-radius:8px;font-size:14px">
+                        <option value="">All Cashiers</option>
+                    </select>
+                </div>
                 <div id="rawSalesInfo" style="margin-top:12px;color:#555">Recent sales not loaded.</div>
                 <ul id="rawSalesList" style="margin-top:8px;list-style:none;padding:0"></ul>
             </div>
@@ -255,6 +275,8 @@
 <script>
     let allProducts = [];
     let filteredProducts = [];
+    let allRawSales = [];
+    const rawSalesMap = new Map();
 
     function getToken() { return localStorage.getItem("adminToken"); }
 
@@ -348,9 +370,11 @@
                 document.getElementById("totalValue").textContent = formatCurrency(totalValue);
                 document.getElementById("lowStock").textContent = lowStock;
                 document.getElementById("totalCategories").textContent = cats;
+                checkLowStock(productsData);
             }
         } catch(e) { console.error("Products error:", e); }
 
+        document.getElementById("todayTransactions").textContent = "...";
         try {
             const perfRes = await fetch("/api/sales/today-performance", { headers: authHeaders() });
             if (perfRes.ok) {
@@ -358,8 +382,9 @@
                 document.getElementById("todayRevenue").textContent = formatCurrency(perf.revenueToday || 0);
                 document.getElementById("todayProfit").textContent = formatCurrency(perf.profitToday || 0);
                 document.getElementById("todayMargin").textContent = (parseFloat(perf.profitMargin) || 0) + "%";
+                document.getElementById("todayTransactions").textContent = perf.transactionsToday ?? "–";
             }
-        } catch(e) { console.error("Performance error:", e); }
+        } catch(e) { console.error("Performance error:", e); document.getElementById("todayTransactions").textContent = "–"; }
 
         try { await loadReport(); } catch(e) { console.error("Report error:", e); }
         try { await loadRawSales(); } catch(e) { console.error("Sales error:", e); }
@@ -615,6 +640,64 @@
         if (e.key === "Enter") login();
     });
 
+    // Low Stock Alert functions
+    function saveLowStockThreshold() {
+        const val = parseInt(document.getElementById("lowStockThresholdInput").value) || 10;
+        localStorage.setItem("lowStockThreshold", val);
+        loadDashboard();
+    }
+
+    function checkLowStock(products) {
+        const threshold = parseInt(localStorage.getItem("lowStockThreshold")) || 10;
+        document.getElementById("lowStockThresholdInput").value = threshold;
+        const low = products.filter(p => (p.stock || 0) < threshold);
+        const banner = document.getElementById("lowStockBanner");
+        if (low.length) {
+            document.getElementById("lowStockItems").textContent = low.map(p => p.name + " (" + p.stock + ")").join(", ");
+            banner.style.display = "block";
+        } else {
+            banner.style.display = "none";
+        }
+    }
+
+    function exportCSV() {
+        const rows = document.querySelectorAll("#reportBody tr");
+        // Filter out placeholder rows (no real data)
+        const dataRows = Array.from(rows).filter(r => r.querySelectorAll("td").length === 5 && r.querySelector("td[colspan]") === null);
+        if (!dataRows.length) {
+            showMessage("No data to export", "error");
+            return;
+        }
+        const header = "Date,Transactions,Revenue (NGN),Profit (NGN),Margin (%)";
+        const lines = dataRows.map(r => {
+            const cells = r.querySelectorAll("td");
+            return Array.from(cells).map((td, i) => {
+                let val = td.textContent.trim();
+                // Strip currency symbol and commas from Revenue and Profit columns (index 2 and 3)
+                if (i === 2 || i === 3) val = val.replace(/[₦,]/g, "");
+                // Strip % from Margin column (index 4)
+                if (i === 4) val = val.replace("%", "");
+                // Wrap in quotes if contains comma
+                if (val.includes(",")) val = '"' + val + '"';
+                return val;
+            }).join(",");
+        });
+        const csv = [header, ...lines].join("\n");
+        const today = new Date();
+        const dateStr = today.getFullYear() + "-" +
+            String(today.getMonth() + 1).padStart(2, "0") + "-" +
+            String(today.getDate()).padStart(2, "0");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "sales-report-" + dateStr + ".csv";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
     // Load Recent Sales — shows every individual sale with items, cashier, total
     async function loadRawSales() {
         const info = document.getElementById("rawSalesInfo");
@@ -630,6 +713,10 @@
                 return;
             }
             const sales = await res.json();
+            allRawSales = sales;
+            rawSalesMap.clear();
+            sales.forEach(s => rawSalesMap.set(s._id, s));
+            rebuildCashierDropdown();
 
             if (!sales.length) {
                 info.textContent = "No sales recorded yet.";
@@ -648,14 +735,20 @@
                     </tr>`
                 ).join("");
 
+                const cashierAttr = (sale.cashier || "").replace(/"/g, "&quot;");
+
                 return `
-                <li style="background:white;border:1px solid #e9ecef;border-radius:10px;margin-bottom:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.05)">
+                <li data-cashier="${cashierAttr}" style="background:white;border:1px solid #e9ecef;border-radius:10px;margin-bottom:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.05)">
                     <div style="background:#f8f9fa;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;border-bottom:1px solid #e9ecef">
                         <div>
                             <span style="font-weight:700;color:#1e293b">&#128722; ${sale.cashier || "cashier"}</span>
                             <span style="margin-left:12px;font-size:12px;color:#6b7280">${date}</span>
                         </div>
-                        <div style="font-weight:800;font-size:15px;color:#16a34a">&#8358;${(sale.total || 0).toLocaleString()}</div>
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <span style="font-weight:800;font-size:15px;color:#16a34a">&#8358;${(sale.total || 0).toLocaleString()}</span>
+                            <button class="btn btn-sm" style="background:#667eea;padding:5px 10px;font-size:12px" onclick="reprintReceiptById('${sale._id}')">&#128424; Reprint</button>
+                            <button class="btn btn-danger btn-sm" style="padding:5px 10px;font-size:12px" onclick="voidSale('${sale._id}', this)">&#128465; Void</button>
+                        </div>
                     </div>
                     <div style="padding:8px 14px">
                         <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -675,6 +768,100 @@
         } catch (err) {
             info.textContent = "Failed to load sales. Please try again.";
             console.error("loadRawSales error:", err);
+        }
+    }
+
+    function rebuildCashierDropdown() {
+        const select = document.getElementById("cashierFilter");
+        const current = select.value;
+        const names = [...new Set(allRawSales.map(s => s.cashier).filter(Boolean))].sort();
+        select.innerHTML = '<option value="">All Cashiers</option>' +
+            names.map(n => `<option value="${n}" ${n === current ? "selected" : ""}>${n}</option>`).join("");
+    }
+
+    function applyCashierFilter() {
+        const val = document.getElementById("cashierFilter").value;
+        document.querySelectorAll("#rawSalesList li[data-cashier]").forEach(li => {
+            li.style.display = (!val || li.dataset.cashier === val) ? "" : "none";
+        });
+    }
+
+    function reprintReceiptById(id) {
+        const sale = rawSalesMap.get(id);
+        if (!sale) return;
+        const date = new Date(sale.date).toLocaleString("en-NG");
+        const rows = (sale.items || []).map(function(i) {
+            var amt = ((i.price || 0) * (i.qty || 1)).toLocaleString();
+            return "<tr>" +
+                   "<td>" + (i.name || "Item") + (i.qty > 1 ? " x" + i.qty : "") + "</td>" +
+                   "<td>&#8358;" + amt + "</td>" +
+                 "</tr>";
+        }).join("");
+
+        var html =
+          "<!DOCTYPE html><html><head><meta charset=UTF-8>" +
+          "<style>" +
+            "@media print{@page{margin:3mm 2mm;}body{margin:0;}}" +
+            "*{box-sizing:border-box;margin:0;padding:0;}" +
+            "html,body{direction:ltr;writing-mode:horizontal-tb;}" +
+            "body{font-family:'Courier New',Courier,monospace;width:72mm;margin:0 auto;padding:4px 2px;font-size:12px;color:#000;}" +
+            "h2{text-align:center;font-size:14px;font-weight:bold;margin:3px 0;}" +
+            ".c{text-align:center;margin:2px 0;font-size:11px;}" +
+            ".rno{text-align:center;font-size:11px;margin:2px 0;letter-spacing:1px;}" +
+            "hr{border:none;border-top:1px dashed #000;margin:4px 0;}" +
+            "table{width:100%;border-collapse:collapse;margin:3px 0;}" +
+            "td{vertical-align:top;padding:2px 0;font-size:12px;line-height:1.4;}" +
+            "td:last-child{text-align:right;white-space:nowrap;}" +
+            "thead td{font-weight:bold;border-bottom:1px dashed #000;padding-bottom:3px;}" +
+            ".totrow td{font-weight:bold;font-size:13px;border-top:1px dashed #000;padding-top:4px;}" +
+            ".foot{text-align:center;font-size:11px;margin:3px 0;}" +
+            ".cut{height:14mm;}" +
+          "</style></head><body>" +
+          "<h2>ZUNNY MINI MART</h2>" +
+          "<p class=rno>Receipt No: " + sale._id + "</p>" +
+          "<p class=c>No: 221 New Ogorode Road Sapele</p>" +
+          "<p class=c>Tel: 08088309326, 07066787348</p>" +
+          "<p class=c>" + date + "</p>" +
+          "<hr>" +
+          "<table>" +
+            "<thead><tr><td>Item</td><td>Amount</td></tr></thead>" +
+            "<tbody>" + rows + "</tbody>" +
+            "<tfoot><tr class=totrow><td>TOTAL =</td><td>&#8358;" + (sale.total || 0).toLocaleString() + "</td></tr></tfoot>" +
+          "</table>" +
+          "<hr>" +
+          "<p class=foot>Thank you for shopping!</p>" +
+          "<p class=foot>Please come again &#9786;</p>" +
+          "<div class=cut></div>" +
+          "</body></html>";
+
+        var w = window.open("", "PRINT", "width=320,height=700");
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        setTimeout(function() { w.print(); w.close(); }, 400);
+    }
+
+    async function voidSale(id, btn) {
+        if (!confirm("Void this sale? Stock will be restored and the sale permanently deleted.")) return;
+        try {
+            const res = await fetch("/api/sales/" + id, {
+                method: "DELETE",
+                headers: authHeaders()
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || "Failed to void sale");
+            }
+            const li = btn.closest("li");
+            if (li) li.remove();
+            // Update allRawSales cache, rawSalesMap, and rebuild dropdown
+            allRawSales = allRawSales.filter(s => s._id !== id);
+            rawSalesMap.delete(id);
+            rebuildCashierDropdown();
+            loadDashboard();
+            showMessage("&#10003; Sale voided and stock restored");
+        } catch (err) {
+            showMessage(err.message || "Error voiding sale", "error");
         }
     }
 </script>
