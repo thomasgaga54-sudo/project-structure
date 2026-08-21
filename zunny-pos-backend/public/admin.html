@@ -390,6 +390,13 @@
         try { await loadRawSales(); } catch(e) { console.error("Sales error:", e); }
     }
 
+    async function loadReport() {
+        try {
+            let url = "/api/sales/report";
+            const startDate = document.getElementById("reportStart").value;
+            const endDate = document.getElementById("reportEnd").value;
+
+            if (startDate && endDate) {
                 url += `?start=${encodeURIComponent(startDate)}&end=${encodeURIComponent(endDate)}`;
             }
 
@@ -410,7 +417,6 @@
 
             document.getElementById("historyStatus").textContent = `Showing ${report.length} day(s) of sales history.`;
             body.innerHTML = report.map(day => {
-                // Build date string directly from the grouped values — no timezone shift
                 const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
                 const dateStr = `${String(day._id.day).padStart(2,'0')} ${months[day._id.month - 1]} ${day._id.year}`;
                 const margin = day.totalSales > 0 ? ((day.totalProfit / day.totalSales) * 100).toFixed(2) : 0;
@@ -428,6 +434,7 @@
             document.getElementById("reportBody").innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:#d9534f">Error loading report. Please refresh the page.</td></tr>`;
             document.getElementById("historyStatus").textContent = "Unable to load sales history.";
         }
+    }
     }
 
     function clearReport() {
