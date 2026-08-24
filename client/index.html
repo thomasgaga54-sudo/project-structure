@@ -371,12 +371,16 @@
 
 <script>
   let products = [];
+  const productsMap = new Map();
   let cart = [];
   let total = 0;
 
   if (!localStorage.getItem("token")) {
     window.location.href = "login.html";
   }
+
+  // Clear stale product cache on fresh page load so stock is always fetched from server
+  localStorage.removeItem("cachedProducts");
 
   function checkLowStockCashier() {
     const threshold = parseInt(localStorage.getItem("lowStockThreshold")) || 10;
@@ -395,6 +399,8 @@
     const cached = localStorage.getItem("cachedProducts");
     if (cached) {
       products = JSON.parse(cached);
+      productsMap.clear();
+      products.forEach(p => productsMap.set(p._id, p));
       renderProducts();
       checkLowStockCashier();
     }
@@ -404,6 +410,8 @@
       });
       if (!res.ok) throw new Error();
       products = await res.json();
+      productsMap.clear();
+      products.forEach(p => productsMap.set(p._id, p));
       localStorage.setItem("cachedProducts", JSON.stringify(products));
       renderProducts();
       checkLowStockCashier();
@@ -426,8 +434,8 @@
       return;
     }
     grid.innerHTML = filtered.map(p => `
-      <div class="product-card ${p.stock === 0 ? 'out-of-stock' : ''}" onclick="addToCart(${JSON.stringify(p).replace(/"/g, '&quot;')})">
-        ${p.stock > 0 && p.stock <= 5 ? '<span class="low-badge">Low</span>' : ''}
+      <div class="product-card ${(p.stock || 0) <= 0 ? 'out-of-stock' : ''}" onclick="addToCartById('${p._id}')">
+        ${(p.stock || 0) > 0 && (p.stock || 0) <= 5 ? '<span class="low-badge">Low</span>' : ''}
 
         <h4>${p.name}</h4>
         <div class="product-price">₦${p.price.toLocaleString()}</div>
@@ -435,8 +443,14 @@
     `).join("");
   }
 
+  function addToCartById(id) {
+    const product = productsMap.get(id);
+    if (!product) return;
+    addToCart(product);
+  }
+
   function addToCart(product) {
-    if (product.stock === 0) return alert("Out of stock");
+    if ((product.stock || 0) <= 0) return alert("Out of stock");
     const existing = cart.find(i => i._id === product._id);
     if (existing) existing.qty++;
     else cart.push({ ...product, qty: 1 });
