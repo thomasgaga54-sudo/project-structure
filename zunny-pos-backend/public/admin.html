@@ -123,7 +123,7 @@
             <div class="stats">
                 <div class="stat-card"><div class="stat-number" id="totalProducts">0</div><div class="stat-label">Total Products</div></div>
                 <div class="stat-card"><div class="stat-number" id="totalValue">₦0</div><div class="stat-label">Inventory Value</div></div>
-                <div class="stat-card"><div class="stat-number" id="lowStock">0</div><div class="stat-label">Low Stock (&lt;10)</div></div>
+                <div class="stat-card"><div class="stat-number" id="lowStock">0</div><div class="stat-label">Low Stock (&lt;2)</div></div>
                 <div class="stat-card"><div class="stat-number" id="totalCategories">0</div><div class="stat-label">Categories</div></div>
             </div>
 
@@ -353,7 +353,7 @@
             const productsData = await productsRes.json();
             if (productsRes.ok) {
                 const totalValue = productsData.reduce((s, p) => s + ((p.price || 0) * (p.stock || 0)), 0);
-                const lowStock = productsData.filter(p => (p.stock || 0) < 10).length;
+                const lowStock = productsData.filter(p => (p.stock || 0) < 2).length;
                 const cats = new Set(productsData.map(p => p.category).filter(Boolean)).size;
                 document.getElementById("totalProducts").textContent = productsData.length;
                 document.getElementById("totalValue").textContent = formatCurrency(totalValue);
