@@ -380,7 +380,8 @@
   // Clear stale product cache on fresh page load so stock is always fetched from server
   localStorage.removeItem("cachedProducts");
 
-
+  // Low stock banner removed from cashier page
+  function checkLowStockCashier() {}
 
   async function loadProducts() {
     const cached = localStorage.getItem("cachedProducts");
