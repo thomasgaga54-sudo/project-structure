@@ -331,7 +331,13 @@
       </div>
     </div>
     <div id="lowStockBanner" style="display:none;background:#fee2e2;border-left:4px solid #dc2626;padding:10px 14px;margin:0 16px 8px;border-radius:6px;color:#dc2626;font-size:13px;font-weight:600">
-      ⚠️ Low Stock: <span id="lowStockItems"></span>
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleLowStockDetailCashier()">
+        <span>⚠️ Low Stock: <span id="lowStockCount"></span> product(s) need restocking</span>
+        <span id="lowStockToggleIcon" style="font-size:11px;margin-left:8px">▼ Show</span>
+      </div>
+      <div id="lowStockDetail" style="display:none;margin-top:6px;font-weight:400;line-height:1.7">
+        <span id="lowStockItems"></span>
+      </div>
     </div>
     <div class="product-grid" id="productGrid">
       <div class="loading-msg">⏳ Loading products...</div>
@@ -382,16 +388,29 @@
   // Clear stale product cache on fresh page load so stock is always fetched from server
   localStorage.removeItem("cachedProducts");
 
+  function toggleLowStockDetailCashier() {
+    const detail = document.getElementById("lowStockDetail");
+    const icon = document.getElementById("lowStockToggleIcon");
+    if (detail.style.display === "none") {
+      detail.style.display = "block";
+      icon.textContent = "▲ Hide";
+    } else {
+      detail.style.display = "none";
+      icon.textContent = "▼ Show";
+    }
+  }
+
   function checkLowStockCashier() {
-    const threshold = parseInt(localStorage.getItem("lowStockThreshold")) || 10;
+    const threshold = parseInt(localStorage.getItem("lowStockThreshold")) || 5;
     const low = products.filter(p => (p.stock || 0) < threshold);
     const banner = document.getElementById("lowStockBanner");
     const items = document.getElementById("lowStockItems");
     if (low.length) {
-        items.textContent = low.map(p => p.name + " (" + p.stock + ")").join(", ");
-        banner.style.display = "block";
+      document.getElementById("lowStockCount").textContent = low.length;
+      items.textContent = low.map(p => p.name + " (" + (p.stock || 0) + ")").join(", ");
+      banner.style.display = "block";
     } else {
-        banner.style.display = "none";
+      banner.style.display = "none";
     }
   }
 

@@ -123,13 +123,19 @@
             <!-- Low Stock Threshold input -->
             <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px">
               <label style="font-weight:600;color:#555">Low Stock Threshold:</label>
-              <input type="number" id="lowStockThresholdInput" min="1" value="10"
+              <input type="number" id="lowStockThresholdInput" min="1" value="5"
                      style="width:80px;padding:6px 10px;border:2px solid #e9ecef;border-radius:8px;font-size:14px"
                      onchange="saveLowStockThreshold()">
             </div>
             <!-- Low Stock Banner -->
-            <div id="lowStockBanner" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:14px;margin-bottom:16px;color:#dc2626;font-weight:600">
-              ⚠️ Low Stock Alert: <span id="lowStockItems"></span>
+            <div id="lowStockBanner" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:16px;color:#dc2626;font-weight:600">
+              <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleLowStockDetail()">
+                <span>⚠️ Low Stock: <span id="lowStockCount"></span> product(s) below threshold</span>
+                <span id="lowStockToggleIcon" style="font-size:12px;margin-left:8px">▼ Show</span>
+              </div>
+              <div id="lowStockDetail" style="display:none;margin-top:8px;font-weight:400;font-size:13px;line-height:1.7">
+                <span id="lowStockItems"></span>
+              </div>
             </div>
             <div class="stats">
                 <div class="stat-card"><div class="stat-number" id="totalProducts">0</div><div class="stat-label">Total Products</div></div>
@@ -648,18 +654,31 @@
 
     // Low Stock Alert functions
     function saveLowStockThreshold() {
-        const val = parseInt(document.getElementById("lowStockThresholdInput").value) || 10;
+        const val = parseInt(document.getElementById("lowStockThresholdInput").value) || 5;
         localStorage.setItem("lowStockThreshold", val);
         loadDashboard();
     }
 
+    function toggleLowStockDetail() {
+        const detail = document.getElementById("lowStockDetail");
+        const icon = document.getElementById("lowStockToggleIcon");
+        if (detail.style.display === "none") {
+            detail.style.display = "block";
+            icon.textContent = "▲ Hide";
+        } else {
+            detail.style.display = "none";
+            icon.textContent = "▼ Show";
+        }
+    }
+
     function checkLowStock(products) {
-        const threshold = parseInt(localStorage.getItem("lowStockThreshold")) || 10;
+        const threshold = parseInt(localStorage.getItem("lowStockThreshold")) || 5;
         document.getElementById("lowStockThresholdInput").value = threshold;
         const low = products.filter(p => (p.stock || 0) < threshold);
         const banner = document.getElementById("lowStockBanner");
         if (low.length) {
-            document.getElementById("lowStockItems").textContent = low.map(p => p.name + " (" + p.stock + ")").join(", ");
+            document.getElementById("lowStockCount").textContent = low.length;
+            document.getElementById("lowStockItems").textContent = low.map(p => p.name + " (" + (p.stock || 0) + ")").join(", ");
             banner.style.display = "block";
         } else {
             banner.style.display = "none";
