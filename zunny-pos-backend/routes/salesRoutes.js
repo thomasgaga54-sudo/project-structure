@@ -212,12 +212,28 @@ router.get("/recent", auth, async (req, res) => {
     return res.status(403).json({ message: "Admins only" });
   }
   try {
-    const limit = parseInt(req.query.limit) || 50;
-    const sales = await Sale.find()
-      .sort({ date: -1 })
-      .limit(limit)
-      .lean();
-    res.json(sales);
+    const limit = Math.min(parseInt(req.query.limit) || 200, 500);
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const skip = (page - 1) * limit;
+
+    // Optional date range filter
+    const filter = {};
+    if (req.query.start || req.query.end) {
+      filter.date = {};
+      if (req.query.start) filter.date.$gte = new Date(req.query.start);
+      if (req.query.end) {
+        const end = new Date(req.query.end);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(req.query.end)) end.setHours(23, 59, 59, 999);
+        filter.date.$lte = end;
+      }
+    }
+
+    const [sales, total] = await Promise.all([
+      Sale.find(filter).sort({ date: -1 }).skip(skip).limit(limit).lean(),
+      Sale.countDocuments(filter)
+    ]);
+
+    res.json({ sales, total, page, limit, pages: Math.ceil(total / limit) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

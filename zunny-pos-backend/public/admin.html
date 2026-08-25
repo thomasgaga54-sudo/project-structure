@@ -161,7 +161,7 @@
             </div>
             <div style="margin-top:16px;">
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-                    <button class="btn btn-sm" style="background:#22c55e" onclick="loadRawSales()">Load Recent Sales</button>
+                    <button class="btn btn-sm" style="background:#22c55e" onclick="loadRawSales(1)">Load Recent Sales</button>
                     <label style="font-weight:600;color:#555">Filter by Cashier:</label>
                     <select id="cashierFilter" onchange="applyCashierFilter()"
                             style="padding:7px 12px;border:2px solid #e9ecef;border-radius:8px;font-size:14px">
@@ -169,6 +169,7 @@
                     </select>
                 </div>
                 <div id="rawSalesInfo" style="margin-top:12px;color:#555">Recent sales not loaded.</div>
+                <div id="rawSalesPagination" style="display:flex;align-items:center;gap:10px;margin:10px 0;flex-wrap:wrap"></div>
                 <ul id="rawSalesList" style="margin-top:8px;list-style:none;padding:0"></ul>
             </div>
         </div>
@@ -267,6 +268,7 @@
     let filteredProducts = [];
     let allRawSales = [];
     const rawSalesMap = new Map();
+    let rawSalesCurrentPage = 1;
 
     function getToken() { return localStorage.getItem("adminToken"); }
 
@@ -674,31 +676,43 @@
     }
 
     // Load Recent Sales — shows every individual sale with items, cashier, total
-    async function loadRawSales() {
+    async function loadRawSales(page) {
+        page = page || rawSalesCurrentPage || 1;
+        rawSalesCurrentPage = page;
+
         const info = document.getElementById("rawSalesInfo");
         const list = document.getElementById("rawSalesList");
-        info.textContent = "Loading recent sales...";
+        info.textContent = "Loading sales...";
         list.innerHTML = "";
 
         try {
-            const res = await fetch("/api/sales/recent?limit=100", { headers: authHeaders() });
+            const res = await fetch(`/api/sales/recent?limit=200&page=${page}`, { headers: authHeaders() });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
                 info.textContent = "Error: " + (err.message || res.status);
                 return;
             }
-            const sales = await res.json();
+            const data = await res.json();
+            // Support both old array response and new paginated object response
+            const sales = Array.isArray(data) ? data : (data.sales || []);
+            const totalSales = Array.isArray(data) ? sales.length : (data.total || sales.length);
+            const totalPages = Array.isArray(data) ? 1 : (data.pages || 1);
+
             allRawSales = sales;
             rawSalesMap.clear();
             sales.forEach(s => rawSalesMap.set(s._id, s));
             rebuildCashierDropdown();
+            renderRawSalesPagination(page, totalPages, totalSales);
 
             if (!sales.length) {
                 info.textContent = "No sales recorded yet.";
+                document.getElementById("rawSalesPagination").innerHTML = "";
                 return;
             }
 
-            info.textContent = `Showing ${sales.length} most recent sale(s):`;
+            const start = (page - 1) * 200 + 1;
+            const end = Math.min(page * 200, totalSales);
+            info.textContent = `Showing ${start}–${end} of ${totalSales} sale(s):`;
 
             list.innerHTML = sales.map(sale => {
                 const date = new Date(sale.date).toLocaleString("en-NG", { timeZone: "Africa/Lagos", day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
@@ -740,10 +754,23 @@
                 </li>`;
             }).join("");
 
+            // Re-apply cashier filter after reload
+            applyCashierFilter();
+
         } catch (err) {
             info.textContent = "Failed to load sales. Please try again.";
             console.error("loadRawSales error:", err);
         }
+    }
+
+    function renderRawSalesPagination(page, totalPages, totalSales) {
+        const container = document.getElementById("rawSalesPagination");
+        if (totalPages <= 1) { container.innerHTML = ""; return; }
+        container.innerHTML = `
+            <button class="btn btn-sm" style="background:#6b7280" ${page <= 1 ? "disabled" : ""} onclick="loadRawSales(${page - 1})">&#8592; Prev</button>
+            <span style="font-size:13px;color:#555">Page ${page} of ${totalPages}</span>
+            <button class="btn btn-sm" style="background:#6b7280" ${page >= totalPages ? "disabled" : ""} onclick="loadRawSales(${page + 1})">Next &#8594;</button>
+        `;
     }
 
     function rebuildCashierDropdown() {
