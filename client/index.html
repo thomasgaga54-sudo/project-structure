@@ -421,7 +421,7 @@
     }
     grid.innerHTML = filtered.map(p => `
       <div class="product-card ${(p.stock || 0) <= 0 ? 'out-of-stock' : ''}" onclick="addToCartById('${p._id}')">
-        ${(p.stock || 0) > 0 && (p.stock || 0) <= 5 ? '<span class="low-badge">Low</span>' : ''}
+        ${(p.stock || 0) > 0 && (p.stock || 0) <= 2 ? '<span class="low-badge">Low</span>' : ''}
 
         <h4>${p.name}</h4>
         <div class="product-price">₦${p.price.toLocaleString()}</div>
