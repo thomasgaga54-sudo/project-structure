@@ -269,6 +269,7 @@
     let allRawSales = [];
     const rawSalesMap = new Map();
     let rawSalesCurrentPage = 1;
+    let perfRefreshInterval = null;
 
     function getToken() { return localStorage.getItem("adminToken"); }
 
@@ -329,8 +330,12 @@
         document.getElementById(tabName).classList.add("active");
         btn.classList.add("active");
         if (tabName === "dashboard") loadDashboard();
-        else if (tabName === "manage-products") loadProducts();
-        else if (tabName === "upload-images") loadProductsForSelect();
+        else {
+            // Stop the performance auto-refresh when leaving the dashboard
+            if (perfRefreshInterval) { clearInterval(perfRefreshInterval); perfRefreshInterval = null; }
+            if (tabName === "manage-products") loadProducts();
+            else if (tabName === "upload-images") loadProductsForSelect();
+        }
     }
 
     function showMessage(text, type = "success") {
@@ -365,7 +370,18 @@
             }
         } catch(e) { console.error("Products error:", e); }
 
-        document.getElementById("todayTransactions").textContent = "...";
+        await refreshTodayPerformance();
+
+        try { await loadReport(); } catch(e) { console.error("Report error:", e); }
+        try { await loadRawSales(); } catch(e) { console.error("Sales error:", e); }
+
+        // Auto-refresh Today's Performance every 30 seconds while on dashboard
+        if (perfRefreshInterval) clearInterval(perfRefreshInterval);
+        perfRefreshInterval = setInterval(refreshTodayPerformance, 30000);
+    }
+
+    // Lightweight poll — only fetches today's numbers, not the full sales list
+    async function refreshTodayPerformance() {
         try {
             const perfRes = await fetch("/api/sales/today-performance", { headers: authHeaders() });
             if (perfRes.ok) {
@@ -375,10 +391,7 @@
                 document.getElementById("todayMargin").textContent = (parseFloat(perf.profitMargin) || 0) + "%";
                 document.getElementById("todayTransactions").textContent = perf.transactionsToday ?? "–";
             }
-        } catch(e) { console.error("Performance error:", e); document.getElementById("todayTransactions").textContent = "–"; }
-
-        try { await loadReport(); } catch(e) { console.error("Report error:", e); }
-        try { await loadRawSales(); } catch(e) { console.error("Sales error:", e); }
+        } catch(e) { console.error("Performance refresh error:", e); }
     }
 
     async function loadReport() {

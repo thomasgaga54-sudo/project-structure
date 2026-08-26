@@ -1,21 +1,19 @@
-const CACHE_NAME = "zunny-pos-v5";
-const ASSETS = [
-  "/",
-  "/index.html",
-  "/login.html",
-  "/admin.html",
+const CACHE_NAME = "zunny-pos-v6";
+
+const STATIC_ASSETS = [
   "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/js/quagga.min.js"
 ];
 
-// Install — cache all static assets
+// HTML pages — never cache these, always fetch fresh from network
+const HTML_PAGES = ["/", "/index.html", "/login.html", "/admin.html"];
+
+// Install — only cache static assets (not HTML)
 self.addEventListener("install", e => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(ASSETS);
-    })
+    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
@@ -30,28 +28,22 @@ self.addEventListener("activate", e => {
   self.clients.claim();
 });
 
-// Fetch strategy
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
 
   const url = new URL(e.request.url);
 
-  // /api/products — network first, fall back to cache
-  if (url.pathname === "/api/products" || url.pathname === "/products") {
+  // HTML pages — network first, no caching
+  // This ensures cashiers always get the latest code after a deploy
+  if (HTML_PAGES.includes(url.pathname) || url.pathname === "") {
     e.respondWith(
-      fetch(e.request)
-        .then(res => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
-          return res;
-        })
-        .catch(() => caches.match(e.request))
+      fetch(e.request).catch(() => caches.match(e.request))
     );
     return;
   }
 
-  // Other API calls — network only
-  if (url.pathname.startsWith("/api/") || url.hostname.includes("onrender.com")) {
+  // API calls — network only, never cache
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/products") || url.pathname.startsWith("/auth")) {
     e.respondWith(
       fetch(e.request).catch(() =>
         new Response(JSON.stringify({ message: "You are offline." }), {
@@ -62,7 +54,7 @@ self.addEventListener("fetch", e => {
     return;
   }
 
-  // Static assets — cache first, then network
+  // Static assets (icons, images, JS libs) — cache first, network fallback
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
