@@ -483,11 +483,13 @@
   async function checkout() {
     if (!cart.length) return alert("Cart is empty");
 
-    // Snapshot cart and total before clearing
+    const checkoutBtn = document.querySelector(".btn-checkout");
+
+    // Snapshot cart and total
     const saleItems = cart.map(i => ({ ...i }));
     const saleTotal = total;
 
-    // Generate a unique offlineId using timestamp + random suffix to avoid collisions
+    // Generate a unique offlineId
     const offlineId = Date.now().toString() + "_" + Math.random().toString(36).slice(2, 8);
 
     const saleData = {
@@ -497,9 +499,8 @@
       date: new Date().toISOString()
     };
 
-    // Print and clear cart immediately so cashier can start the next sale
-    printReceipt(saleItems, saleTotal, offlineId);
-    clearCart();
+    // Disable button and show processing state
+    if (checkoutBtn) { checkoutBtn.disabled = true; checkoutBtn.textContent = "Processing..."; }
 
     try {
       const res = await fetch("/api/sales", {
@@ -513,21 +514,35 @@
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || `Sale sync failed (${res.status})`);
+        throw new Error(errorData.message || `Server error (${res.status})`);
       }
 
       await res.json();
-      // Sale saved online — no alert needed, keeps flow fast
+
+      // ✅ Server confirmed — NOW print and clear cart
+      printReceipt(saleItems, saleTotal, offlineId);
+      clearCart();
+
     } catch (err) {
-      // Save to pending queue for later sync
-      let pendingSales = [];
-      try { pendingSales = JSON.parse(localStorage.getItem("pendingSales") || "[]"); } catch { pendingSales = []; }
-      // Avoid duplicates in the pending queue
-      if (!pendingSales.find(s => s.offlineId === offlineId)) {
-        pendingSales.push(saleData);
-        localStorage.setItem("pendingSales", JSON.stringify(pendingSales));
+      // Re-enable button so cashier can retry — cart is NOT cleared
+      if (checkoutBtn) { checkoutBtn.disabled = false; checkoutBtn.textContent = "Checkout"; }
+
+      const isNetworkError = err instanceof TypeError && err.message.toLowerCase().includes("fetch");
+
+      if (isNetworkError) {
+        // True offline — queue it and let them know
+        let pendingSales = [];
+        try { pendingSales = JSON.parse(localStorage.getItem("pendingSales") || "[]"); } catch { pendingSales = []; }
+        if (!pendingSales.find(s => s.offlineId === offlineId)) {
+          pendingSales.push(saleData);
+          localStorage.setItem("pendingSales", JSON.stringify(pendingSales));
+        }
+        updatePendingStatus();
+        alert("⚠️ You appear to be offline. The sale has been queued and will sync automatically when your connection returns.\n\nDo NOT close this page until synced.");
+      } else {
+        // Server returned an error — don't queue, show the actual problem
+        alert("❌ Sale could not be saved:\n\n" + err.message + "\n\nPlease try again. If the problem persists, check your connection or log out and back in.");
       }
-      updatePendingStatus();
     }
   }
 
