@@ -3,6 +3,39 @@ const Sale = require("../models/sale");
 const Product = require("../models/product");
 const auth = require("../middleware/auth");
 
+// WAT = UTC+1. Returns { start, end } as UTC Date objects covering the full
+// current day in West Africa Time, so queries on MongoDB (which stores UTC)
+// correctly capture all sales that happened "today" in Lagos/Abuja.
+function watTodayBounds() {
+  const WAT_OFFSET_MS = 60 * 60 * 1000; // UTC+1
+  const nowUTC = Date.now();
+  const nowWAT = new Date(nowUTC + WAT_OFFSET_MS);
+  // Midnight WAT in UTC = subtract the time-of-day portion then subtract the offset back
+  const midnightWAT_asUTC = new Date(
+    nowUTC
+    + WAT_OFFSET_MS
+    - (nowWAT.getUTCHours() * 3600000
+       + nowWAT.getUTCMinutes() * 60000
+       + nowWAT.getUTCSeconds() * 1000
+       + nowWAT.getUTCMilliseconds())
+    - WAT_OFFSET_MS
+  );
+  return {
+    start: midnightWAT_asUTC,
+    end: new Date(midnightWAT_asUTC.getTime() + 24 * 60 * 60 * 1000 - 1)
+  };
+}
+
+// Parse a YYYY-MM-DD string as WAT (UTC+1) start-of-day, returned as UTC Date.
+function watDateStart(dateStr) {
+  return new Date(new Date(dateStr).getTime() - 60 * 60 * 1000);
+}
+
+// Parse a YYYY-MM-DD string as WAT end-of-day, returned as UTC Date.
+function watDateEnd(dateStr) {
+  return new Date(new Date(dateStr).getTime() - 60 * 60 * 1000 + 24 * 60 * 60 * 1000 - 1);
+}
+
 // Create sale + deduct stock
 router.post("/", auth, async (req, res) => {
   try {
@@ -92,23 +125,15 @@ router.get("/report", auth, async (req, res) => {
     const match = {};
 
     if (start && end) {
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      
-      // Validate dates
+      // Treat YYYY-MM-DD strings as WAT (UTC+1) day boundaries, not UTC
+      const startDate = /^\d{4}-\d{2}-\d{2}$/.test(start) ? watDateStart(start) : new Date(start);
+      const endDate   = /^\d{4}-\d{2}-\d{2}$/.test(end)   ? watDateEnd(end)     : new Date(end);
+
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
         return res.status(400).json({ message: "Invalid date format" });
       }
-      
-      // If date is in YYYY-MM-DD format, set end time to end of day
-      if (/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-        endDate.setHours(23, 59, 59, 999);
-      }
-      
-      match.date = {
-        $gte: startDate,
-        $lte: endDate
-      };
+
+      match.date = { $gte: startDate, $lte: endDate };
     }
 
     const report = await Sale.aggregate([
@@ -149,11 +174,7 @@ router.get("/today-performance", auth, async (req, res) => {
   }
 
   try {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
+    const { start, end } = watTodayBounds();
 
     const sales = await Sale.find({
       date: {
@@ -182,10 +203,7 @@ router.get("/today-performance", auth, async (req, res) => {
 router.delete("/today", auth, async (req, res) => {
   if (req.user.role !== "admin") return res.status(403).json({ message: "Admins only" });
   try {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
+    const { start, end } = watTodayBounds();
     const result = await Sale.deleteMany({ date: { $gte: start, $lte: end } });
     res.json({ message: `Cleared ${result.deletedCount} sales for today` });
   } catch (err) {
@@ -220,11 +238,13 @@ router.get("/recent", auth, async (req, res) => {
     const filter = {};
     if (req.query.start || req.query.end) {
       filter.date = {};
-      if (req.query.start) filter.date.$gte = new Date(req.query.start);
+      if (req.query.start) {
+        filter.date.$gte = /^\d{4}-\d{2}-\d{2}$/.test(req.query.start)
+          ? watDateStart(req.query.start) : new Date(req.query.start);
+      }
       if (req.query.end) {
-        const end = new Date(req.query.end);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(req.query.end)) end.setHours(23, 59, 59, 999);
-        filter.date.$lte = end;
+        filter.date.$lte = /^\d{4}-\d{2}-\d{2}$/.test(req.query.end)
+          ? watDateEnd(req.query.end) : new Date(req.query.end);
       }
     }
 

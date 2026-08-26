@@ -290,6 +290,7 @@
     }
     .status-bar { text-align: center; padding: 10px; font-size: 13px; font-weight: 600; }
     .pending-bar { color: #334155; }
+    .pending-bar.has-pending { background: #fef3c7; color: #92400e; border-radius: 8px; border: 1px solid #fcd34d; }
     .sync-btn { margin-top: 8px; background: #2563eb; }
   </style>
 </head>
@@ -542,7 +543,13 @@
     const pendingCount = getPendingSales().length;
     const pendingEl = document.getElementById("pendingStatus");
     if (!pendingEl) return;
-    pendingEl.textContent = pendingCount > 0 ? `⏳ Pending sales: ${pendingCount}` : "✅ No pending sales";
+    if (pendingCount > 0) {
+      pendingEl.textContent = `⚠️ ${pendingCount} unsynced sale(s) — tap "Sync Pending Sales"`;
+      pendingEl.classList.add("has-pending");
+    } else {
+      pendingEl.textContent = "✅ All sales synced";
+      pendingEl.classList.remove("has-pending");
+    }
   }
 
   async function trySyncPendingSales() {
@@ -728,6 +735,15 @@
     await syncPendingSales();
     updatePendingStatus();
   });
+
+  // Auto-sync whenever cashier switches back to this tab
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState === "visible" && navigator.onLine && getPendingSales().length > 0) {
+      await syncPendingSales();
+      updatePendingStatus();
+    }
+  });
+
   if (!navigator.onLine) document.getElementById("offlineBanner").style.display = "block";
 
   updatePendingStatus();
