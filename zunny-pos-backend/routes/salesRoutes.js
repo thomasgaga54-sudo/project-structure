@@ -8,18 +8,15 @@ const auth = require("../middleware/auth");
 // correctly capture all sales that happened "today" in Lagos/Abuja.
 function watTodayBounds() {
   const WAT_OFFSET_MS = 60 * 60 * 1000; // UTC+1
-  const nowUTC = Date.now();
-  const nowWAT = new Date(nowUTC + WAT_OFFSET_MS);
-  // Midnight WAT in UTC = subtract the time-of-day portion then subtract the offset back
-  const midnightWAT_asUTC = new Date(
-    nowUTC
-    + WAT_OFFSET_MS
-    - (nowWAT.getUTCHours() * 3600000
-       + nowWAT.getUTCMinutes() * 60000
-       + nowWAT.getUTCSeconds() * 1000
-       + nowWAT.getUTCMilliseconds())
-    - WAT_OFFSET_MS
-  );
+  const nowWAT = new Date(Date.now() + WAT_OFFSET_MS);
+  // Build midnight WAT as a UTC timestamp:
+  // Take today's date components in WAT, set time to 00:00:00, then subtract the offset
+  const midnightWAT_asUTC = new Date(Date.UTC(
+    nowWAT.getUTCFullYear(),
+    nowWAT.getUTCMonth(),
+    nowWAT.getUTCDate(),
+    0, 0, 0, 0
+  ) - WAT_OFFSET_MS);
   return {
     start: midnightWAT_asUTC,
     end: new Date(midnightWAT_asUTC.getTime() + 24 * 60 * 60 * 1000 - 1)
